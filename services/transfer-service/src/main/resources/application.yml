@@ -1,0 +1,45 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: transfer-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/bankdb}
+    username: ${DB_USER:bank}
+    password: ${DB_PASSWORD:bank123}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: 5000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none          # schema is owned by Flyway, never by Hibernate
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState          # NO database here: a DB outage must not restart pods
+        readiness:
+          include: readinessState,db      # DB check only in readiness
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 100ms,300ms,1s
+    tags:
+      application: ${spring.application.name}

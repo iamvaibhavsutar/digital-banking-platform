@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><title>Digital Bank</title>
+  <style>
+    body{font-family:Arial;max-width:520px;margin:40px auto}
+    input,button{padding:8px;margin:4px 0;width:100%}
+    pre{background:#f4f4f4;padding:10px}
+  </style>
+</head>
+<body>
+  <h2>Digital Banking Portal</h2>
+  <h3>Check balance</h3>
+  <input id="acc" placeholder="Account number e.g. ACC1001">
+  <button onclick="getAcc()">Get account</button>
+
+  <h3>Transfer funds</h3>
+  <input id="from" placeholder="From account">
+  <input id="to" placeholder="To account">
+  <input id="amt" placeholder="Amount" type="number" step="0.01">
+  <button onclick="transfer()">Send</button>
+  <pre id="out"></pre>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const out = t => $('out').textContent = JSON.stringify(t, null, 2);
+    async function getAcc(){
+      const r = await fetch('/api/accounts/' + encodeURIComponent($('acc').value));
+      out(await r.json());
+    }
+    async function transfer(){
+      // One key per user click. Retrying the SAME click reuses the key (no double debit).
+      const key = crypto.randomUUID();
+      const r = await fetch('/api/transfers', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Idempotency-Key':key},
+        body: JSON.stringify({fromAccount:$('from').value,toAccount:$('to').value,amount:$('amt').value})
+      });
+      out(await r.json());
+    }
+  </script>
+</body>
+</html>

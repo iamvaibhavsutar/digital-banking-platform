@@ -1,0 +1,25 @@
+# Copy to /etc/kubernetes/audit/policy.yaml on kube-cp (see Section 16.11 for API server flags).
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages: ["RequestReceived"]
+rules:
+  - level: None
+    users: ["system:kube-proxy"]
+    verbs: ["watch"]
+  - level: None
+    nonResourceURLs: ["/healthz*", "/livez*", "/readyz*", "/version"]
+  - level: None
+    userGroups: ["system:nodes"]
+    verbs: ["get", "list", "watch"]
+  - level: Metadata
+    resources:
+      - { group: "", resources: ["secrets", "configmaps", "serviceaccounts/token"] }
+  - level: RequestResponse
+    resources:
+      - { group: "rbac.authorization.k8s.io" }
+  - level: Request
+    resources:
+      - { group: "", resources: ["pods/exec", "pods/attach", "pods/portforward"] }
+  - level: Request
+    verbs: ["create", "update", "patch", "delete", "deletecollection"]
+  - level: Metadata

@@ -1,0 +1,41 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata: { name: selfsigned-bootstrap }
+spec: { selfSigned: {} }
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: { name: bank-root-ca, namespace: cert-manager }
+spec:
+  isCA: true
+  commonName: bank-internal-ca
+  secretName: bank-root-ca
+  issuerRef: { name: selfsigned-bootstrap, kind: ClusterIssuer }
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata: { name: bank-ca }
+spec:
+  ca: { secretName: bank-root-ca }
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata: { name: bank-tls, namespace: banking }
+spec:
+  secretName: bank-tls
+  dnsNames: ["bank.internal"]
+  issuerRef: { name: bank-ca, kind: ClusterIssuer }
+  duration: 1h             # LAB value. Production: 2160h (90 days)
+  renewBefore: 50m         # LAB value. Production: 360h
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: { name: bank-tls-demo, namespace: banking }
+spec:
+  ingressClassName: traefik
+  tls: [{ hosts: ["bank.internal"], secretName: bank-tls }]
+  rules:
+    - host: bank.internal
+      http:
+        paths:
+          - { path: /api/accounts, pathType: Prefix, backend: { service: { name: account-service, port: { number: 8080 } } } }
