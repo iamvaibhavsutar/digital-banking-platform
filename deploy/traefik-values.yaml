@@ -1,0 +1,32 @@
+# Traefik replaces the retired ingress-nginx. Exposed as NodePort 30080 for the ALB target group.
+deployment:
+  replicas: 2
+service:
+  type: NodePort
+ports:
+  web:
+    port: 8000
+    exposedPort: 80
+    nodePort: 30080
+  websecure:
+    port: 8443
+    exposedPort: 443
+    nodePort: 30443
+  traefik:
+    port: 8080
+ingressRoute:
+  dashboard:
+    enabled: false
+additionalArguments:
+  - "--ping=true"
+  - "--ping.entryPoint=web"          # ALB health check hits /ping on 30080
+  - "--accesslog=true"
+  - "--accesslog.format=json"
+  - "--metrics.prometheus=true"
+providers:
+  kubernetesIngress:
+    publishedService:
+      enabled: false
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 192Mi }

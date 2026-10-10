@@ -1,0 +1,33 @@
+# Elasticsearch 8 with security ON (TLS + auth). Kibana connects with the kibana_system user.
+# First start: set passwords with scripts/es-setup.sh, then export ES_PASSWORD / KIBANA_PASSWORD in /opt/elk/.env
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - ELASTIC_PASSWORD=${ES_PASSWORD}
+      - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=true
+      - xpack.security.http.ssl.key=certs/es/es.key
+      - xpack.security.http.ssl.certificate=certs/es/es.crt
+      - xpack.security.http.ssl.certificate_authorities=certs/ca/ca.crt
+    ports: ["9200:9200"]
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+      - ./certs:/usr/share/elasticsearch/config/certs:ro
+    ulimits: { memlock: { soft: -1, hard: -1 } }
+    restart: unless-stopped
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    depends_on: [elasticsearch]
+    environment:
+      - ELASTICSEARCH_HOSTS=https://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
+      - ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES=/usr/share/kibana/config/certs/ca/ca.crt
+    ports: ["5601:5601"]
+    volumes: ["./certs:/usr/share/kibana/config/certs:ro"]
+    restart: unless-stopped
+volumes:
+  es_data:

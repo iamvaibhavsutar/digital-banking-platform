@@ -1,0 +1,12 @@
+name: transaction-service
+tier: backend
+image:
+  repository: <ACCOUNT>.dkr.ecr.ap-south-1.amazonaws.com/transaction-service
+  tag: 1.0.0
+ingress:
+  paths: ["/api/transactions"]
+envFromConfigMap: [bank-config]
+secretEnv:
+  - { name: DB_PASSWORD, secret: db-credentials, key: DB_PASSWORD }
+env:
+  FLYWAY_ENABLED: "false"

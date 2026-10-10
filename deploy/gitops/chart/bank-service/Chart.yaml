@@ -1,0 +1,6 @@
+apiVersion: v2
+name: bank-service
+description: Generic chart for every banking workload (Spring Boot services and the portal)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

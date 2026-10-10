@@ -1,0 +1,7 @@
+name: notification-service
+tier: backend
+image:
+  repository: <ACCOUNT>.dkr.ecr.ap-south-1.amazonaws.com/notification-service
+  tag: 1.0.0
+ingress:
+  paths: ["/api/notifications"]

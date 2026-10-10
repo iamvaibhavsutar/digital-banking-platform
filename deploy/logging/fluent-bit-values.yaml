@@ -1,0 +1,82 @@
+# helm upgrade --install fluent-bit fluent/fluent-bit -n logging --create-namespace -f fluent-bit-values.yaml
+# Replace <TOOLS_IP> with `terraform output tools_ip`. Needs secrets es-ca and es-credentials (scripts/create-logging-secrets.sh).
+serviceMonitor: { enabled: true }
+env:
+  - name: ES_PASSWORD
+    valueFrom: { secretKeyRef: { name: es-credentials, key: password } }
+extraVolumes:
+  - { name: es-ca, secret: { secretName: es-ca } }
+  - { name: state, hostPath: { path: /var/lib/fluent-bit-state, type: DirectoryOrCreate } }
+extraVolumeMounts:
+  - { name: es-ca, mountPath: /es-ca, readOnly: true }
+  - { name: state, mountPath: /state }
+config:
+  service: |
+    [SERVICE]
+        Flush        5
+        Log_Level    info
+        Parsers_File /fluent-bit/etc/parsers.conf
+        HTTP_Server  On
+        HTTP_Listen  0.0.0.0
+        HTTP_Port    2020
+  inputs: |
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*_banking_*.log,/var/log/containers/*_traefik_*.log
+        multiline.parser  cri
+        Tag               kube.*
+        DB                /state/flb_kube.db
+        Mem_Buf_Limit     20MB
+        Skip_Long_Lines   On
+    [INPUT]
+        Name   tail
+        Path   /var/log/kubernetes/audit/audit.log
+        Tag    audit.kube
+        Parser json
+        DB     /state/flb_audit.db
+  filters: |
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Merge_Log           On
+        Keep_Log            Off
+        K8S-Logging.Parser  On
+    [FILTER]
+        Name                  multiline
+        Match                 kube.*
+        multiline.key_content log
+        multiline.parser      java
+  outputs: |
+    [OUTPUT]
+        Name                es
+        Match               kube.*
+        Host                <TOOLS_IP>
+        Port                9200
+        HTTP_User           fluentbit
+        HTTP_Passwd         ${ES_PASSWORD}
+        tls                 On
+        tls.verify          On
+        tls.ca_file         /es-ca/http_ca.crt
+        tls.vhost           elasticsearch
+        Logstash_Format     On
+        Logstash_Prefix     bank-logs
+        Suppress_Type_Name  On
+        Replace_Dots        On
+        Retry_Limit         False
+    [OUTPUT]
+        Name                es
+        Match               audit.*
+        Host                <TOOLS_IP>
+        Port                9200
+        HTTP_User           fluentbit
+        HTTP_Passwd         ${ES_PASSWORD}
+        tls                 On
+        tls.verify          On
+        tls.ca_file         /es-ca/http_ca.crt
+        tls.vhost           elasticsearch
+        Logstash_Format     On
+        Logstash_Prefix     bank-audit
+        Suppress_Type_Name  On
+        Replace_Dots        On
+tolerations:
+  - operator: Exists

@@ -1,0 +1,16 @@
+name: transfer-service
+tier: backend
+image:
+  repository: <ACCOUNT>.dkr.ecr.ap-south-1.amazonaws.com/transfer-service
+  tag: 1.0.0
+ingress:
+  paths: ["/api/transfers"]
+envFromConfigMap: [bank-config]
+secretEnv:
+  - { name: DB_PASSWORD, secret: db-credentials, key: DB_PASSWORD }
+env:
+  FLYWAY_ENABLED: "false"
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4

@@ -1,0 +1,51 @@
+# Replace <SNS_TOPIC_ARN> with `terraform output sns_topic_arn`.
+# Alertmanager signs SNS calls with the node IAM role (sns:Publish allowed in modules/iam).
+fullnameOverride: monitoring
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests: { cpu: 100m, memory: 512Mi }
+      limits: { memory: 1Gi }
+grafana:
+  adminPassword: change-me-on-first-login   # lab only; use an ExternalSecret in real life
+  sidecar:
+    dashboards: { enabled: true, label: grafana_dashboard, searchNamespace: ALL }
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+alertmanager:
+  config:
+    global: { resolve_timeout: 5m }
+    route:
+      receiver: sns
+      group_by: [alertname, job]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: "null"
+          matchers: [alertname = "Watchdog"]
+    inhibit_rules:
+      - source_matchers: [severity = "critical"]
+        target_matchers: [severity = "warning"]
+        equal: [alertname, job]
+    receivers:
+      - name: "null"
+      - name: sns
+        sns_configs:
+          - topic_arn: <SNS_TOPIC_ARN>
+            sigv4: { region: ap-south-1 }
+            subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})'
+            message: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ .Annotations.runbook }}{{ "\n" }}{{ end }}'
+            send_resolved: true
+  alertmanagerSpec:
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }
+# kubeadm exposes these on localhost only, so the default scrapes would show red targets
+kubeEtcd: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeProxy: { enabled: false }

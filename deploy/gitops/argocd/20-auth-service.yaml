@@ -1,0 +1,14 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata: { name: auth-service, namespace: argocd }
+spec:
+  project: default
+  source:
+    repoURL: <GITOPS_REPO_URL>
+    targetRevision: main
+    path: chart/bank-service
+    helm:
+      valueFiles: ["../../values/auth-service.yaml"]
+  destination: { server: https://kubernetes.default.svc, namespace: banking }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

@@ -1,0 +1,100 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata: { name: banking-slo, namespace: monitoring, labels: { release: monitoring } }
+spec:
+  groups:
+    # ---- SLI: share of requests that were NOT 5xx (4xx are customer mistakes, not our failure) ----
+    - name: banking.sli
+      rules:
+        - record: banking:error_ratio:rate5m
+          expr: sum(rate(http_server_requests_seconds_count{job=~".*-service",status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{job=~".*-service"}[5m]))
+        - record: banking:error_ratio:rate30m
+          expr: sum(rate(http_server_requests_seconds_count{job=~".*-service",status=~"5.."}[30m])) / sum(rate(http_server_requests_seconds_count{job=~".*-service"}[30m]))
+        - record: banking:error_ratio:rate1h
+          expr: sum(rate(http_server_requests_seconds_count{job=~".*-service",status=~"5.."}[1h])) / sum(rate(http_server_requests_seconds_count{job=~".*-service"}[1h]))
+        - record: banking:error_ratio:rate6h
+          expr: sum(rate(http_server_requests_seconds_count{job=~".*-service",status=~"5.."}[6h])) / sum(rate(http_server_requests_seconds_count{job=~".*-service"}[6h]))
+        - record: banking:latency_under_300ms:ratio_rate5m
+          expr: sum(rate(http_server_requests_seconds_bucket{job=~".*-service",le="0.3"}[5m])) / sum(rate(http_server_requests_seconds_count{job=~".*-service"}[5m]))
+    # ---- SLO 99.9% => error budget 0.001 (43.2 min / 30 days). Multi-window burn-rate alerts ----
+    - name: banking.slo-alerts
+      rules:
+        - alert: BankingErrorBudgetFastBurn
+          expr: banking:error_ratio:rate1h > (14.4 * 0.001) and banking:error_ratio:rate5m > (14.4 * 0.001)
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "Fast burn: spending the 30-day error budget ~14x too fast"
+            runbook: "docs/runbooks/13-bad-deploy-rollback.md"
+        - alert: BankingErrorBudgetSlowBurn
+          expr: banking:error_ratio:rate6h > (6 * 0.001) and banking:error_ratio:rate30m > (6 * 0.001)
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Slow burn: error budget draining 6x faster than allowed"
+            runbook: "docs/runbooks/13-bad-deploy-rollback.md"
+        - alert: BankingLatencySLOBreach
+          expr: banking:latency_under_300ms:ratio_rate5m < 0.95
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Less than 95% of requests are answered under 300 ms"
+            runbook: "docs/runbooks/14-high-latency.md"
+    - name: banking.availability
+      rules:
+        - alert: BankingTargetDown
+          expr: up{job=~".*-service"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "Scrape target {{ $labels.job }} / {{ $labels.pod }} is down"
+            runbook: "docs/runbooks/01-crashloopbackoff.md"
+        # up==0 cannot fire when the target vanished (Lab 12) -> alert on ABSENCE
+        - alert: BankingTargetsMissing
+          expr: absent(up{job=~".*-service"})
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "No banking scrape targets exist at all (ServiceMonitor selector broken?)"
+            runbook: "docs/runbooks/15-monitoring-blind-spot.md"
+        - alert: BankingPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="banking"}[15m]) > 3
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.pod }} restarted more than 3 times in 15 minutes"
+            runbook: "docs/runbooks/01-crashloopbackoff.md"
+        - alert: BankingOOMKilled
+          expr: kube_pod_container_status_last_terminated_reason{namespace="banking",reason="OOMKilled"} == 1
+          for: 1m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.pod }} was OOMKilled"
+            runbook: "docs/runbooks/02-oomkilled.md"
+        - alert: BankingDbPoolSaturated
+          expr: hikaricp_connections_pending{job=~".*-service"} > 0
+          for: 3m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.pod }} has requests waiting for a DB connection"
+            runbook: "docs/runbooks/06-rds-connection-exhaustion.md"
+    - name: banking.platform
+      rules:
+        - alert: NodeMemoryLow
+          expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10
+          for: 10m
+          labels: { severity: warning }
+          annotations: { summary: "{{ $labels.instance }} has under 10% memory available", runbook: "docs/runbooks/04-node-notready.md" }
+        - alert: NodeDiskFilling
+          expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[1h], 4*3600) < 0
+          for: 15m
+          labels: { severity: warning }
+          annotations: { summary: "{{ $labels.instance }} {{ $labels.mountpoint }} will fill within 4 hours", runbook: "docs/runbooks/05-disk-full.md" }
+        - alert: CertificateExpiringSoon
+          expr: certmanager_certificate_expiration_timestamp_seconds - time() < 14*24*3600
+          labels: { severity: warning }
+          annotations: { summary: "Certificate {{ $labels.name }} expires in under 14 days", runbook: "docs/runbooks/12-certificate-expiry.md" }
+        - alert: LogShipperErrors
+          expr: rate(fluentbit_output_errors_total[5m]) > 0
+          for: 10m
+          labels: { severity: warning }
+          annotations: { summary: "Fluent Bit cannot ship logs", runbook: "docs/runbooks/16-logging-stopped.md" }

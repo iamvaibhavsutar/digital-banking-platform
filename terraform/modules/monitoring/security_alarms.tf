@@ -1,8 +1,4 @@
-# Add-on file for your EXISTING monitoring module.
-# Assumes: var.name, aws_sns_topic.alerts, and an aws_cloudtrail "this" resource already exist.
-# In that aws_cloudtrail "this" block, ADD these two lines:
-#   cloud_watch_logs_group_arn = "${aws_cloudwatch_log_group.trail.arn}:*"
-#   cloud_watch_logs_role_arn  = aws_iam_role.trail_logs.arn
+# CloudTrail -> CloudWatch Logs plumbing and security metric filters/alarms (the aws_cloudtrail in main.tf references these).
 
 resource "aws_cloudwatch_log_group" "trail" {
   name              = "/banking/cloudtrail"

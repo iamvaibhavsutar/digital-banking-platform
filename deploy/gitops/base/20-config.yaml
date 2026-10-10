@@ -1,0 +1,9 @@
+# Non-secret shared config. Replace <RDS_ENDPOINT> with `terraform output rds_endpoint`.
+# NOTE: shared ConfigMap = shared blast radius (Lab 9). Pods only re-read it on restart.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: bank-config, namespace: banking }
+data:
+  DB_URL: "jdbc:postgresql://<RDS_ENDPOINT>:5432/bankdb"
+  DB_USER: "bank"
+  DB_POOL_SIZE: "10"
